@@ -1,0 +1,102 @@
+# Autobattler ruleset — v0
+#
+# This file is the single source of truth for game parameters.
+# The engine reads it; nothing here should be hardcoded in Python.
+# Hash this file into every replay header so a run can be reproduced.
+
+version: 0.1.0
+
+match:
+  players: 2
+  starting_health: 20
+  max_rounds: 50          # hard stop; highest health wins, draw if tied
+
+economy:
+  starting_gold: 4
+  base_income: 5
+  interest_per: 10        # 1 gold per this much banked
+  interest_cap: 5
+  reroll_cost: 2
+  # Gold cost to buy a unit from the shop, by tier. Sell refund mirrors this.
+  cost_by_tier: {1: 1, 2: 2, 3: 3}
+  sell_refund: full       # full | half  — full removes sell/buy arbitrage concerns
+  streak:                 # bonus gold at these consecutive win-or-loss counts
+    3: 1
+    5: 2
+
+planning:
+  # Safety rail: an agent that never ends its turn is cut off here.
+  max_actions_per_round: 200
+
+shop:
+  slots: 5
+  # Probability of each tier appearing, by player level.
+  # Rows must sum to 1.0.
+  tier_odds:
+    1: [1.00, 0.00, 0.00]
+    2: [0.75, 0.25, 0.00]
+    3: [0.55, 0.35, 0.10]
+    4: [0.40, 0.40, 0.20]
+    5: [0.25, 0.45, 0.30]
+
+pool:
+  # Copies of each unit available across ALL players. This is what makes
+  # contesting real; do not raise these without expecting the game to soften.
+  copies_by_tier:
+    1: 12
+    2: 8
+    3: 5
+
+level:
+  starting: 2
+  max: 5
+  board_size_by_level: {2: 2, 3: 3, 4: 4, 5: 5}
+  # Gold cost to buy the NEXT level (level 2 -> 3 costs 4, etc.)
+  buy_cost: {2: 4, 3: 8, 4: 14}
+
+board:
+  positioning: true       # false => no grid; combat is a rules-based brawl
+  width: 5
+  height: 3
+  # Each player occupies their own half in a mirrored 3x5; on contact the
+  # boards are merged into a single 3x10 field for resolution.
+
+combat:
+  tick_cap: 300
+  # Resolution order within a tick. Deterministic: units act sorted by unit_id.
+  target_rule: nearest    # nearest | lowest_health
+  target_tiebreak: lowest_id
+  move_metric: chebyshev
+  move_per_tick: 1
+  timeout_result: most_total_health   # tie => draw
+
+damage:
+  # Damage dealt to the LOSING player after a round.
+  # flat_plus_survivors:  base + count(surviving enemy units)
+  # flat_plus_tiers:      base + sum(tier of surviving enemy units)
+  formula: flat_plus_survivors
+  base: 1
+
+traits:
+  # One breakpoint each in v0. Bonus applies to all units with the trait.
+  vanguard:  {breakpoint: 2, bonus: {max_health: +5}}
+  skirmisher: {breakpoint: 2, bonus: {attack_cooldown: -2}}
+  arcanist:  {breakpoint: 2, bonus: {attack_damage: +2}}
+
+# Static unit templates. Instances copy from these and never mutate them.
+# attack_cooldown is in ticks between attacks. range is in squares.
+units:
+  - {id: footman,   tier: 1, trait: vanguard,   max_health: 30, attack_damage: 4, attack_cooldown: 10, range: 1}
+  - {id: scout,     tier: 1, trait: skirmisher, max_health: 20, attack_damage: 3, attack_cooldown: 7,  range: 1}
+  - {id: apprentice,tier: 1, trait: arcanist,   max_health: 18, attack_damage: 5, attack_cooldown: 12, range: 3}
+  - {id: shieldman, tier: 1, trait: vanguard,   max_health: 36, attack_damage: 3, attack_cooldown: 12, range: 1}
+
+  - {id: knight,    tier: 2, trait: vanguard,   max_health: 48, attack_damage: 6, attack_cooldown: 10, range: 1}
+  - {id: duelist,   tier: 2, trait: skirmisher, max_health: 32, attack_damage: 5, attack_cooldown: 6,  range: 1}
+  - {id: ranger,    tier: 2, trait: skirmisher, max_health: 28, attack_damage: 6, attack_cooldown: 9,  range: 3}
+  - {id: adept,     tier: 2, trait: arcanist,   max_health: 30, attack_damage: 9, attack_cooldown: 12, range: 3}
+
+  - {id: warden,    tier: 3, trait: vanguard,   max_health: 70, attack_damage: 9, attack_cooldown: 10, range: 1}
+  - {id: archmage,  tier: 3, trait: arcanist,   max_health: 40, attack_damage: 15,attack_cooldown: 13, range: 4}
+
+purchase_when_board_full: block   # block | bench

@@ -49,3 +49,6 @@ git checkout v0.1
 | `v0.1` | Headless engine | Round loop, shop, pool, traits, grid combat, byte-identical replays. Files say `0.1.0`, from before this scheme. |
 | `v0.2` | Fair fights | Simultaneous tick resolution removes a measured seat bias; per-round random streams; spawn events. |
 | `v0.3` | Trustworthy experiments | Seat-swapped evaluation with intervals, config overlays, a positioning agent and its brawl control; line-ending-proof config hashes. |
+| `v0.4` | RL-ready | Leak-free observations; a gym-style environment with masks, a 371-float observation, and safe shaping. |
+
+The proposed path from here to `v1.0` is in [ROADMAP.md](../ROADMAP.md).

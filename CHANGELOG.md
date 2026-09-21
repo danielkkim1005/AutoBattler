@@ -5,6 +5,63 @@ One section per release, newest first. Versions are `MAJOR.MINOR`; see
 where it matters, **why it matters for reinforcement learning**. The longer
 explanations live in [docs/rl/](docs/rl/README.md).
 
+## v0.4 — RL-ready
+
+**Breaking:** agents now implement `choose(observation, rng)` instead of
+`choose(state, player, rng)`. Game outcomes are unchanged: 90 games across
+three agent pairings are identical to v0.3, action for action and event for
+event.
+
+### Fixed
+
+- **Agents could see the opponent's current-round moves.** Agents received the
+  whole `GameState`, and seat 0 plans first, so seat 1's agent could see seat
+  0's purchases and positioning from *this* round, seat 0's private shop, and a
+  live pool. No existing agent looked, but a learner would have learned to
+  exploit it. Agents now get an observation: their own state live, everyone
+  else's frozen at the start of planning, shops private. A spying test catches
+  the leak, and was checked against a deliberately leaky `observe()` to be sure
+  it fails when it should. One residual leak, through the live pool in
+  `legal_actions`, is documented and on the roadmap.
+  → [docs/rl/04-observations.md](docs/rl/04-observations.md)
+
+### Added
+
+- **`rl.AutoBattlerEnv`**, a gymnasium-style environment with no dependencies:
+  `reset` / `step`, one step per planning action, a 98-action discrete space,
+  exact action masks (`action_masks()`, MaskablePPO's name), a 371-float
+  observation with a name for every position, and `terminal` or
+  potential-based `shaped` rewards. Every episode is a replayable game.
+  → [docs/rl/05-environment.md](docs/rl/05-environment.md)
+- **`python -m rl.demo`**: masked-random episodes, with every replay verified.
+- **Phased rounds**: `begin_round` → `act` → `finish_round`, so the
+  environment can pause mid-round for the learner. `resolve` composes them as
+  before.
+- **`engine/observation.py`**: `observe(state, seat)` and the round-start
+  public snapshot.
+- **[ROADMAP.md](ROADMAP.md)**: a proposed path to v1.0, marking where your
+  design decisions are needed.
+
+### Measured
+
+- Environment throughput: about 6,600 steps a second, around 38 episodes, on
+  one process.
+- A masked random policy lost all 10 demo games to `GreedyAgent`: the floor
+  for any learner.
+
+### RL notes
+
+- **Hand-written agents cannot reveal an information leak; learners exploit
+  one.** The refactor changed no outcome precisely because nothing was reading
+  the leaked data yet.
+- **Mask, don't penalise.** Illegal actions raise; the mask removes them from
+  the policy's choices entirely.
+- **Potential-based shaping cannot be gamed.** It telescopes, adding exactly
+  nothing to any episode's return, as two tests verify. Pass the learner's own
+  gamma.
+- **Hitting `max_rounds` is termination, not truncation.** The rules define a
+  winner there, and a learner must not bootstrap past it.
+
 ## v0.3 — Trustworthy experiments
 
 **Breaking:** v0.2 replays do not reproduce byte-for-byte. The result block

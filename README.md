@@ -5,12 +5,14 @@ reinforcement learning. `rules.yaml` holds every number, [`SPEC.md`](SPEC.md)
 holds the semantics, and `engine/` implements them without printing, sleeping,
 or rendering anything.
 
-**Current release: v0.3 — Trustworthy experiments.** See [CHANGELOG.md](CHANGELOG.md).
+**Current release: v0.4 — RL-ready.** See [CHANGELOG.md](CHANGELOG.md), and
+[ROADMAP.md](ROADMAP.md) for the proposed path to v1.0.
 
 ```bash
 python -m pytest tests/ -q
 python run_game.py --seed 42 --verify
 python evaluate.py --agents positional greedy --seeds 300
+python -m rl.demo --episodes 20
 ```
 
 ## Tuning workflow
@@ -33,6 +35,7 @@ there, and what v0.3 already measured.
 | Read this | For |
 | --- | --- |
 | [CHANGELOG.md](CHANGELOG.md) | What changed in each release, and why it matters for RL. |
+| [ROADMAP.md](ROADMAP.md) | The proposed path to v1.0, and the design decisions it needs from you. |
 | [docs/rl/](docs/rl/README.md) | RL notes: lessons from this codebase, in reading order. |
 | [docs/VERSIONING.md](docs/VERSIONING.md) | The `MAJOR.MINOR` scheme and the release checklist. |
 | [SPEC.md](SPEC.md) | Game semantics. Changed sections are marked with their version. |
@@ -50,8 +53,10 @@ there, and what v0.3 already measured.
 | `engine/economy.py` | Income, interest, streaks, refunds. |
 | `engine/traits.py` | Breakpoints and the bonuses they unlock. |
 | `engine/combat.py` | Board merge, simultaneous tick resolution, targeting, movement. |
-| `engine/game.py` | The round loop, per-round random streams, damage, placements. |
+| `engine/game.py` | The round loop in three phases, per-round random streams, damage, placements. |
 | `engine/replay.py` | The replay record and its deterministic serialisation. |
+| `engine/observation.py` | What a seat may know: own state live, everyone else frozen at round start. |
+| `rl/` | `AutoBattlerEnv` (gym-style, masked), the action and observation spaces, and `python -m rl.demo`. |
 | `agents/` | `RandomAgent` (the floor), `GreedyAgent` (buys greedily), `PositionalAgent` (greedy buying plus a formation). |
 | `analysis/` | Statistics, replay telemetry, seat-swapped evaluation. Reads replays; never changes an outcome. |
 | `configs/ablations/` | Overlays: one question each, merged onto `rules.yaml`. |

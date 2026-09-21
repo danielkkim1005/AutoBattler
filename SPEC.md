@@ -39,6 +39,12 @@ the same round state; ordering between players does not matter because planning
 actions never touch shared state except the pool, which is resolved on purchase
 in player-index order.
 
+*(v0.4)* "The same round state" is enforced, not assumed. Agents receive an
+observation rather than the state: their own situation live, and everyone
+else's — board, health, level, gold, and the pool — frozen as it stood when
+planning began. Opponents' shops are never visible. See
+docs/rl/04-observations.md.
+
 A purchase removes a copy from the shared pool. If the pool is empty for that
 unit it cannot appear in a shop at all. Selling returns the copy to the pool.
 

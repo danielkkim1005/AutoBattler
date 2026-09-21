@@ -11,6 +11,8 @@ Read them in order; later notes lean on earlier ones.
 | 1 | [Determinism and random streams](01-determinism.md) | v0.1–v0.3 | Randomness must be a function of the seed, and each consumer gets its own stream. |
 | 2 | [When the environment picks the winner](02-environment-bias.md) | v0.2 | A learning agent will exploit any structural bias, and weak agents can't reveal one. |
 | 3 | [Evaluating agents and rulesets honestly](03-evaluation.md) | v0.3 | Swap seats, treat the seed as the unit, pair comparisons, and build a control. |
+| 4 | [What an agent is allowed to know](04-observations.md) | v0.4 | Learners exploit every input; hidden information must be hidden by construction. |
+| 5 | [The environment interface](05-environment.md) | v0.4 | Mask illegal actions, shape only with potentials, and know termination from truncation. |
 
 ## Vocabulary used throughout
 

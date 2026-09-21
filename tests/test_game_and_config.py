@@ -8,6 +8,7 @@ import pytest
 from conftest import place, tweak
 
 from agents import GreedyAgent, RandomAgent
+from engine import __version__
 from engine.config import Config, ConfigError, load_config
 from engine.game import (
     apply_combat_result,
@@ -134,7 +135,7 @@ def test_board_must_fit_the_max_level(config):
 
 def test_real_ruleset_loads_and_validates():
     config = load_config()
-    assert config.version == "0.1.0"
+    assert config.version == __version__
     assert len(config.units) == 10
     assert config.board_size(5) == 5
     assert config.level_cost(5) is None

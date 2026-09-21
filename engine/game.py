@@ -41,6 +41,20 @@ class Agent(Protocol):
         ...
 
 
+def round_streams(rng: random.Random) -> tuple[random.Random, random.Random]:
+    """Split one round's randomness into a shop stream and a combat stream.
+
+    The master ``rng`` gives up exactly one draw per round, whatever happens in
+    that round. So a reroll in round 3, or a fight that goes differently, never
+    shifts what round 4 rolls: every round's randomness depends only on the
+    seed and the round number. That is what lets two configs, or two agents,
+    be compared on genuinely shared luck (docs/rl/01-determinism.md).
+    """
+    round_seed = rng.getrandbits(64)
+    return (random.Random(f"{round_seed}:shop"),
+            random.Random(f"{round_seed}:combat"))
+
+
 def pay_income(state: GameState) -> None:
     for player in state.living_players():
         player.gold += round_income(state.config, player.gold, player.streak)
@@ -127,23 +141,25 @@ def resolve(state: GameState, rng: random.Random, agents: Sequence[Agent],
     """Run one full round and return its replay record.
 
     Takes state and a seeded rng, mutates the state, returns the round record.
-    ``rng`` is the engine stream; ``agent_rng`` is the agents' and is unused
+    ``rng`` is the engine's master stream, from which each round derives its
+    own shop and combat streams. ``agent_rng`` is the agents' and is unused
     when replaying a recorded action list.
     """
     state.round += 1
     record = RoundRecord(round=state.round)
+    shop_rng, combat_rng = round_streams(rng)
 
     pay_income(state)
-    roll_shops(state, rng)
+    roll_shops(state, shop_rng)
 
     if recorded is None:
         if agent_rng is None:
             raise ValueError("agent_rng is required when agents are deciding")
-        record.actions = run_planning(state, agents, rng, agent_rng)
+        record.actions = run_planning(state, agents, shop_rng, agent_rng)
     else:
-        record.actions = replay_planning(state, recorded, rng)
+        record.actions = replay_planning(state, recorded, shop_rng)
 
-    result = resolve_combat(state, rng)
+    result = resolve_combat(state, combat_rng)
     record.events = result.log.records()
 
     tier_of = {tid: state.templates[tid].tier for tid in sorted(state.templates)}

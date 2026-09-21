@@ -11,8 +11,9 @@ Invariants enforced across this package:
   written once at construction and never again.
 """
 
+from engine.version import __version__
 from engine.config import Config, load_config
 from engine.events import Event, EventLog
 from engine.replay import Replay
 
-__all__ = ["Config", "load_config", "Event", "EventLog", "Replay"]
+__all__ = ["__version__", "Config", "load_config", "Event", "EventLog", "Replay"]

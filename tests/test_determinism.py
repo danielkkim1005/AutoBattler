@@ -10,6 +10,7 @@ import hashlib
 import random
 
 from agents import GreedyAgent, RandomAgent
+from engine import __version__
 from engine.config import DEFAULT_RULES_PATH, load_config
 from engine.game import play_game, replay_game
 
@@ -72,7 +73,7 @@ def test_replay_header_carries_seed_and_hash(config):
     record = replay.as_record()
     assert record["seed"] == 42
     assert record["config_hash"] == config.config_hash
-    assert record["version"] == "0.1.0"
+    assert record["version"] == __version__
     assert list(record) == ["version", "config_hash", "seed", "players",
                             "rounds", "result"]
 

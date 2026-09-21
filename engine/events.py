@@ -1,10 +1,16 @@
 """The event log: the only output a renderer consumes.
 
 Every mutation appends a record ``{tick, type, actor, target, value}``. The
-schema is fixed at those five fields, which forces two conventions:
+schema is fixed at those five fields, which forces some conventions:
 
+* ``spawn`` (added in v0.2) puts the unit uid in ``actor``, the owning player
+  index in ``target``, and a dict of template id, starting square, and final
+  post-trait stats in ``value``. Without it the log names uids but never says
+  what they are or where they start, so a renderer could not draw the fight.
 * ``trait_applied`` puts the unit uid in ``actor``, the trait name in
   ``target``, and the stat delta in ``value``. One event per unit per stat.
+* ``death`` puts the dead uid in ``actor``, the lowest-uid unit that hit it
+  that tick in ``target``, and its (zero or negative) health in ``value``.
 * ``combat_end`` puts the winning player index in ``actor`` (None on a draw)
   and the ending tick in ``value``.
 """
@@ -14,13 +20,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterator
 
+SPAWN = "spawn"
 ATTACK = "attack"
 DEATH = "death"
 MOVE = "move"
 TRAIT_APPLIED = "trait_applied"
 COMBAT_END = "combat_end"
 
-EVENT_TYPES = (ATTACK, DEATH, MOVE, TRAIT_APPLIED, COMBAT_END)
+EVENT_TYPES = (SPAWN, ATTACK, DEATH, MOVE, TRAIT_APPLIED, COMBAT_END)
 
 
 @dataclass(frozen=True)

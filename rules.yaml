@@ -1,10 +1,12 @@
-# Autobattler ruleset — v0
+# Autobattler ruleset
 #
 # This file is the single source of truth for game parameters.
 # The engine reads it; nothing here should be hardcoded in Python.
 # Hash this file into every replay header so a run can be reproduced.
 
-version: 0.1.0
+# Release this ruleset ships with. Quoted on purpose: unquoted, YAML reads
+# 0.10 as the float 0.1. Must match engine/version.py (a test enforces it).
+version: "0.2"
 
 match:
   players: 2
@@ -63,7 +65,17 @@ board:
 
 combat:
   tick_cap: 300
-  # Resolution order within a tick. Deterministic: units act sorted by unit_id.
+  # How units within one tick see each other.
+  #   simultaneous: every unit decides from the field as it stood at the start
+  #                 of the tick; then all attacks land together; then moves.
+  #   sequential:   units act one at a time in unit_id order and see the
+  #                 effects of lower ids. The v0.1 behaviour, kept as an
+  #                 ablation: it hands a structural edge to one side.
+  resolution: simultaneous
+  # Two units stepping into the same square in the same tick (simultaneous
+  # only). random: seeded draw from the round's combat stream. lowest_id:
+  # lower unit_id wins, which quietly favours whoever bought first.
+  move_conflict: random
   target_rule: nearest    # nearest | lowest_health
   target_tiebreak: lowest_id
   move_metric: chebyshev

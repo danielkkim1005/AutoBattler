@@ -1,6 +1,8 @@
 """The replay format.
 
 A replay is the whole artifact: seed, config hash, every action, every event.
+The ``version`` field is the engine release that produced it (MAJOR.MINOR), so
+analysis can always say which rules of combat a replay was played under.
 Identical seed + config_hash + action sequence must serialise byte-identically,
 which is why this module fixes key order and JSON separators rather than
 leaving them to defaults.
@@ -12,7 +14,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-REPLAY_VERSION = "0.1.0"
+from engine.version import __version__
 
 
 @dataclass
@@ -36,7 +38,7 @@ class Replay:
     players: list[str]
     rounds: list[RoundRecord] = field(default_factory=list)
     result: dict[str, Any] = field(default_factory=dict)
-    version: str = REPLAY_VERSION
+    version: str = __version__
 
     def as_record(self) -> dict[str, Any]:
         return {

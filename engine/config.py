@@ -99,8 +99,47 @@ class Config:
         return self.pool["copies_by_tier"][tier]
 
 
+# Every enumerated option the engine understands. An option that is spelled
+# right but not implemented yet is absent here on purpose: it should fail when
+# the file loads, not twenty rounds into a sweep.
+ALLOWED_OPTIONS: dict[tuple[str, str], tuple[Any, ...]] = {
+    ("combat", "resolution"): ("simultaneous", "sequential"),
+    ("combat", "move_conflict"): ("random", "lowest_id"),
+    ("combat", "target_rule"): ("nearest", "lowest_health"),
+    ("combat", "target_tiebreak"): ("lowest_id",),
+    ("combat", "move_metric"): ("chebyshev", "manhattan"),
+    ("combat", "timeout_result"): ("most_total_health",),
+    ("damage", "formula"): ("flat_plus_survivors", "flat_plus_tiers"),
+    ("economy", "sell_refund"): ("full", "half"),
+    ("board", "positioning"): (True,),
+}
+ALLOWED_TOP_LEVEL: dict[str, tuple[Any, ...]] = {
+    "purchase_when_board_full": ("block",),
+}
+
+
 def _validate(raw: Mapping[str, Any]) -> None:
     """Fail loudly on config that would silently produce nonsense."""
+    if not isinstance(raw.get("version"), str):
+        raise ConfigError(
+            "version must be a quoted string such as \"0.2\"; "
+            f"got {raw.get('version')!r}. Unquoted, YAML reads 0.10 as 0.1."
+        )
+
+    if raw["match"]["players"] != 2:
+        raise ConfigError("the engine supports exactly 2 players: combat is two "
+                          "mirrored halves and damage goes to 'the other' player")
+
+    for (section, key), allowed in ALLOWED_OPTIONS.items():
+        value = raw[section][key]
+        if value not in allowed:
+            raise ConfigError(f"{section}.{key} = {value!r} is not supported; "
+                              f"expected one of {list(allowed)}")
+    for key, allowed in ALLOWED_TOP_LEVEL.items():
+        if raw[key] not in allowed:
+            raise ConfigError(f"{key} = {raw[key]!r} is not supported; "
+                              f"expected one of {list(allowed)}")
+
     for level, row in raw["shop"]["tier_odds"].items():
         total = sum(row)
         if abs(total - 1.0) > 1e-9:

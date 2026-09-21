@@ -107,6 +107,12 @@ is needed. Whether `flat_plus_survivors` damage makes going wide dominant.
 Whether positioning contributes anything once the economy is tuned. All three
 are config-level ablations, not rewrites.
 
+*(v0.3 status)* Positioning: yes — a simple formation is worth about 10.5
+points of win rate, measured against `board.positioning: false`. In that
+brawl mode every unit is in range of every enemy, nobody moves, and `nearest`
+targeting falls through to the tiebreak. The other two remain open; see
+CHANGELOG.md.
+
 ## Attribution
 
 Design inspired by Teamfight Tactics (Riot Games), Dota Underlords (Valve),

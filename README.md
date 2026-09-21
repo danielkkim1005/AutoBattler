@@ -5,13 +5,28 @@ reinforcement learning. `rules.yaml` holds every number, [`SPEC.md`](SPEC.md)
 holds the semantics, and `engine/` implements them without printing, sleeping,
 or rendering anything.
 
-**Current release: v0.2 — Fair fights.** See [CHANGELOG.md](CHANGELOG.md).
+**Current release: v0.3 — Trustworthy experiments.** See [CHANGELOG.md](CHANGELOG.md).
 
 ```bash
 python -m pytest tests/ -q
 python run_game.py --seed 42 --verify
-python run_game.py --agents greedy greedy --games 200 --summary
+python evaluate.py --agents positional greedy --seeds 300
 ```
+
+## Tuning workflow
+
+1. **Ask one question per overlay.** Copy a file in `configs/ablations/` and
+   change only the keys your question is about.
+2. **Compare on shared seeds:**
+   `python evaluate.py --agents positional greedy --seeds 300 --ablate configs/ablations/yours.yaml`
+3. **Read the paired-difference lines.** An interval that excludes 0 is a real
+   effect. One that straddles 0 means "not detectable at this sample size" —
+   add seeds, or accept that the effect is small.
+4. **Adopt the change** by copying the overlay's values into `rules.yaml`, run
+   `python -m pytest tests/ -q`, and commit.
+
+[docs/rl/03-evaluation.md](docs/rl/03-evaluation.md) explains why each step is
+there, and what v0.3 already measured.
 
 ## Documentation
 
@@ -37,8 +52,11 @@ python run_game.py --agents greedy greedy --games 200 --summary
 | `engine/combat.py` | Board merge, simultaneous tick resolution, targeting, movement. |
 | `engine/game.py` | The round loop, per-round random streams, damage, placements. |
 | `engine/replay.py` | The replay record and its deterministic serialisation. |
-| `agents/` | `RandomAgent` (the floor) and `GreedyAgent` (a non-degenerate opponent). |
-| `run_game.py` | CLI harness. All printing lives here. |
+| `agents/` | `RandomAgent` (the floor), `GreedyAgent` (buys greedily), `PositionalAgent` (greedy buying plus a formation). |
+| `analysis/` | Statistics, replay telemetry, seat-swapped evaluation. Reads replays; never changes an outcome. |
+| `configs/ablations/` | Overlays: one question each, merged onto `rules.yaml`. |
+| `run_game.py` | Play one game; write or verify its replay. |
+| `evaluate.py` | Sweeps with confidence intervals; ruleset comparisons. |
 
 ## Determinism
 
@@ -59,6 +77,7 @@ breaks without it, is in [docs/rl/01-determinism.md](docs/rl/01-determinism.md).
   turn).
 - **v0.2 added** `combat.resolution` and `combat.move_conflict`, and quoted
   `version`, which must now match `engine/version.py`.
+- **v0.3 enabled** `board.positioning: false` (a brawl).
 
 All of these are guesses at your intent. Change the numbers freely; nothing
 reads them except through `Config`, which rejects unsupported options at load.
@@ -107,13 +126,15 @@ overloading:
 | `move` | unit uid | uid it is chasing | destination `[x, y]` |
 | `combat_end` | winning player index, or `null` on a draw | — | final tick |
 
-## Open questions
+## The spec's open questions
 
-The spec's three ablations: whether a bench is needed
-(`purchase_when_board_full`), whether `flat_plus_survivors` makes going wide
-dominant (`damage.formula`), and whether positioning contributes anything
-(`board.positioning`). Only the damage formula can be flipped today; `bench`
-and `positioning: false` are rejected at load until they are implemented.
+| Question | Status (v0.3) |
+| --- | --- |
+| Does positioning contribute anything? | **Yes, about 10.5 points** of win rate for a simple formation, with the brawl as an exact-50% control. |
+| Does `flat_plus_survivors` make going wide dominant? | Open. It needs agents with genuinely different strategies. |
+| Is a bench needed? | Open. `purchase_when_board_full: bench` is rejected at load until implemented. |
+
+Details and numbers are in the v0.3 section of [CHANGELOG.md](CHANGELOG.md).
 
 ## Attribution
 

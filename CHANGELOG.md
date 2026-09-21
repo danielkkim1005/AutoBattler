@@ -5,6 +5,66 @@ One section per release, newest first. Versions are `MAJOR.MINOR`; see
 where it matters, **why it matters for reinforcement learning**. The longer
 explanations live in [docs/rl/](docs/rl/README.md).
 
+## v0.3 — Trustworthy experiments
+
+**Breaking:** v0.2 replays do not reproduce byte-for-byte. The result block
+gained two fields and the ruleset version changed, though game actions and
+events are unchanged. `run_game.py` no longer runs sweeps; use `evaluate.py`.
+
+### Fixed
+
+- **`config_hash` depended on line endings.** It was the SHA-256 of
+  `rules.yaml`'s raw bytes, and git on Windows (`core.autocrlf=true`) rewrites
+  LF as CRLF on checkout. One ruleset hashed two ways (`d3699bd1…` LF,
+  `cfac4cdb…` CRLF), so a checkout, or a friend on another OS, would orphan
+  every recorded replay. Line endings are now normalised before hashing, and
+  `.gitattributes` pins LF. Files that were already LF keep the same hash.
+  → [docs/rl/01-determinism.md](docs/rl/01-determinism.md)
+
+### Added
+
+- **`evaluate.py` and the `analysis/` package.** Seat-swapped matchups by
+  default, a per-seed confidence interval on every score, paired comparisons
+  between rulesets, and unit/trait/level telemetry read straight from replays.
+  `--json` writes the full report.
+  → [docs/rl/03-evaluation.md](docs/rl/03-evaluation.md)
+- **Config overlays** (`load_config(path, overlays)`, `evaluate.py --ablate`):
+  a small YAML holding only the keys it changes, merged onto `rules.yaml`.
+  Unknown keys are rejected, so a typo cannot quietly nullify an experiment.
+  Six ablations ship in `configs/ablations/`.
+- **`PositionalAgent`.** Buys exactly like `GreedyAgent`, then forms up —
+  melee in front, ranged behind — so any difference between the two is the
+  value of positioning alone.
+- **Brawl mode** (`board.positioning: false`). Everyone is in range and nobody
+  moves: the control for the positioning experiment.
+- **`level` and `gold`** in the replay result block.
+- **`agents.REGISTRY`**, mapping names to agent classes for the CLIs.
+
+### Measured
+
+All from 300 seeds, seat-swapped, unless noted.
+
+| Question | Answer |
+| --- | --- |
+| Does positioning matter? *(spec open question 3)* | **Yes.** Positional beats greedy 60.5% [57.5, 63.5]. In a brawl it is exactly 50.0%, so the ~10.5 points are positioning and nothing else. |
+| Does income matter? | **Barely, yet.** Income 5 → 7 shortens games by 0.37 rounds and moves no win rate detectably. Games end around round 8.5, before interest compounds. |
+| Does `flat_plus_tiers` change things? | Games get 2.45 rounds shorter [2.24, 2.65], and positional's edge shrinks by 2.5 points [0.4, 4.6]. |
+| Does `move_conflict: lowest_id` bring back seat bias? | **No detectable effect:** 52.4% vs 52.2% for seat 0, 500 unswapped mirrors. The v0.2 worry was a prediction the data did not bear out. |
+| Is going wide dominant? *(open question 2)* | **Still open.** It needs agents with genuinely different strategies, and every current agent levels at the same moment. |
+| Is a bench needed? *(open question 1)* | **Still open.** Bench mode is not implemented. |
+
+### RL notes
+
+- **The seed is the unit of evaluation, not the game.** Both games of a
+  seat-swapped pair share the same luck. Intervals computed over games would be
+  wrong; computed over seeds, they are right.
+- **Build the control.** The brawl makes positional-vs-greedy exactly 50%. That
+  exact null is what makes the grid result mean something.
+- **Pairing is free precision.** Comparing rulesets on the same seeds cut the
+  interval on positional's edge from about ±4.1 unpaired to ±1.5.
+- **Tuning finding:** games are too short for the economy to matter. Turn
+  `starting_health` or the damage formula before touching income.
+
 ## v0.2 — Fair fights
 
 **Breaking:** replays from v0.1 do not reproduce on v0.2. Combat resolves

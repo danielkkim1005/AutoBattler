@@ -8,8 +8,9 @@ Read them in order; later notes lean on earlier ones.
 
 | # | Note | Release | The lesson in one line |
 | --- | --- | --- | --- |
-| 1 | [Determinism and random streams](01-determinism.md) | v0.1, v0.2 | Randomness must be a function of the seed, and each consumer gets its own stream. |
+| 1 | [Determinism and random streams](01-determinism.md) | v0.1–v0.3 | Randomness must be a function of the seed, and each consumer gets its own stream. |
 | 2 | [When the environment picks the winner](02-environment-bias.md) | v0.2 | A learning agent will exploit any structural bias, and weak agents can't reveal one. |
+| 3 | [Evaluating agents and rulesets honestly](03-evaluation.md) | v0.3 | Swap seats, treat the seed as the unit, pair comparisons, and build a control. |
 
 ## Vocabulary used throughout
 

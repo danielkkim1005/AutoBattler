@@ -1,6 +1,7 @@
 # 1. Determinism and random streams
 
-*Introduced in v0.1 (the agent stream) and v0.2 (per-round streams).*
+*Introduced in v0.1 (the agent stream), v0.2 (per-round streams), and v0.3
+(line-ending-proof config hashes).*
 
 ## Why an RL environment must be deterministic
 
@@ -94,6 +95,14 @@ better than no sharing, and it costs nothing.
 - **Never iterate a `set`.** Set order for strings depends on those same salted
   hashes. This is why the spec bans it and every unit loop goes through
   `sorted(...)`.
+- **Hash content, not bytes on disk** (fixed in v0.3). `config_hash` was the
+  SHA-256 of `rules.yaml`'s raw bytes, and git on Windows rewrites LF as CRLF on
+  checkout. The same ruleset hashed `d3699bd1…` with LF and `cfac4cdb…` with
+  CRLF, so a `git checkout` — or a friend on another OS — would have orphaned
+  every recorded replay. Now line endings are normalised before hashing, and
+  `.gitattributes` pins LF as well. The general lesson: an identity hash must
+  be a function of *meaning*, and everything that is not meaning has to be
+  normalised away first.
 - **Parallel rollouts.** When you run many environments at once for training,
   give each its own seed. Never share one `random.Random` across processes.
 - **Your network is a separate problem.** GPU training is often

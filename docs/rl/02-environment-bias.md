@@ -107,10 +107,18 @@ and they are revealed together. Consequences:
 
 ### Why `move_conflict` defaults to `random`
 
-`lowest_id` would hand every contested square to whoever bought first, which is
-the same bias again in miniature. `random` is a seeded draw from the round's
-*combat* stream (see [lesson 1](01-determinism.md)), so it is fair in
+`lowest_id` hands every contested square to whoever bought first, which looks
+like the same bias again in miniature. `random` is a seeded draw from the
+round's *combat* stream (see [lesson 1](01-determinism.md)), so it is fair in
 expectation, reproducible, and cannot disturb the shops.
+
+**Measured in v0.3, the worry did not materialise:** seat 0 won 52.4% with
+`lowest_id` against 52.2% with `random`, over 500 greedy mirrors. A likely
+reason: under simultaneous resolution, winning a contested square grants no
+first strike, because once the two units are adjacent they both attack on the
+same tick anyway. `random` stays the default because it is fair by construction rather
+than fair by measurement — but the argument above was a prediction, and the
+data did not bear it out. Note it, and keep measuring.
 
 ## After the fix
 
@@ -127,13 +135,17 @@ asymmetry remains by design: within a round, player 0 buys first and so has
 first claim on a contested pool copy. The spec mandates it, and it is not
 detectable at this sample size. If you ever need finer resolution, run 2,000+
 games — and seat-swap them, so that any residual edge cancels out
-([lesson 3](03-evaluation.md), coming in v0.3).
+([lesson 3](03-evaluation.md)).
 
 The v0.1 rule is still available as `combat.resolution: sequential`, so you can
 reproduce every number on this page.
 
 ## Try it
 
+Every number on this page, reproduced with the v0.3 tools:
+
 ```bash
+python evaluate.py --agents greedy greedy --seeds 500 --no-swap --ablate configs/ablations/sequential.yaml
+python evaluate.py --agents greedy greedy --seeds 500 --no-swap --ablate configs/ablations/lowest_id_conflicts.yaml
 python -m pytest tests/test_fair_combat.py -v
 ```

@@ -1,0 +1,5 @@
+# Question: what is positioning worth? (spec open question 3)
+# No grid: everyone is in range, nobody moves. Compare positional vs greedy
+# with and without this overlay.
+board:
+  positioning: false

@@ -1,0 +1,4 @@
+# Question: does flat_plus_survivors make going wide dominant? (spec open
+# question 2) Scores survivors by tier instead of by count.
+damage:
+  formula: flat_plus_tiers

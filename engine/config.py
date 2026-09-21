@@ -111,7 +111,7 @@ ALLOWED_OPTIONS: dict[tuple[str, str], tuple[Any, ...]] = {
     ("combat", "timeout_result"): ("most_total_health",),
     ("damage", "formula"): ("flat_plus_survivors", "flat_plus_tiers"),
     ("economy", "sell_refund"): ("full", "half"),
-    ("board", "positioning"): (True,),
+    ("board", "positioning"): (True, False),
 }
 ALLOWED_TOP_LEVEL: dict[str, tuple[Any, ...]] = {
     "purchase_when_board_full": ("block",),
@@ -175,14 +175,67 @@ def _validate(raw: Mapping[str, Any]) -> None:
         raise ConfigError("max board size exceeds the squares available")
 
 
-def load_config(path: str | Path = DEFAULT_RULES_PATH) -> Config:
-    """Read, validate, and hash the ruleset.
+def canonical_bytes(data: bytes) -> bytes:
+    """The bytes a config hash is taken over: the file with LF line endings.
 
-    The hash is taken over the raw file bytes, so any edit at all — including a
-    comment — produces a new ``config_hash`` and therefore a new replay lineage.
+    Git on Windows rewrites LF as CRLF on checkout by default, which would give
+    one file two hashes depending on the machine - and orphan every replay
+    recorded on the other one. Normalising first makes the hash a property of
+    the content, not the platform. (.gitattributes also pins LF, belt and
+    braces.)
     """
-    path = Path(path)
-    data = path.read_bytes()
-    raw = yaml.safe_load(data.decode("utf-8"))
+    return data.replace(b"\r\n", b"\n")
+
+
+def _merge_overlay(base: Any, overlay: Any, where: str) -> Any:
+    """Deep-merge an overlay onto the base. Mappings merge; anything else,
+    lists included, is replaced wholesale.
+
+    A string key the base does not have is rejected. An overlay that says
+    ``damge:`` instead of ``damage:`` would otherwise merge silently, change
+    nothing, and turn an ablation into a measurement of pure noise. Integer
+    keys may be new, so an overlay can add a level or a tier.
+    """
+    if not (isinstance(base, Mapping) and isinstance(overlay, Mapping)):
+        return overlay
+    merged = dict(base)
+    for key, value in overlay.items():
+        if key not in base:
+            if isinstance(key, str):
+                raise ConfigError(f"overlay sets {where}{key}, which the base "
+                                  "ruleset does not have - a typo?")
+            merged[key] = value
+        else:
+            merged[key] = _merge_overlay(base[key], value, f"{where}{key}.")
+    return merged
+
+
+def load_config(path: str | Path = DEFAULT_RULES_PATH,
+                overlays: tuple[str | Path, ...] = ()) -> Config:
+    """Read, validate, and hash the ruleset, optionally with overlays.
+
+    An overlay is a small YAML file holding only the keys it changes, merged
+    onto the base in order. It is how ablations are written: one reviewable
+    diff that cannot drift out of date as the base ruleset evolves.
+
+    With no overlays, ``config_hash`` is the SHA-256 of the base file, exactly
+    as the spec defines it. With overlays, it hashes the base and each overlay,
+    each framed by its length so that no two combinations can collide. Any
+    edit to any of those files - a comment included - makes a new hash, and so
+    a new replay lineage. Line endings do not.
+    """
+    base = canonical_bytes(Path(path).read_bytes())
+    raw = yaml.safe_load(base.decode("utf-8"))
+    if not overlays:
+        _validate(raw)
+        return Config(raw=raw, config_hash=hashlib.sha256(base).hexdigest())
+
+    parts = [base] + [canonical_bytes(Path(o).read_bytes()) for o in overlays]
+    digest = hashlib.sha256()
+    for part in parts:
+        digest.update(len(part).to_bytes(8, "big"))
+        digest.update(part)
+    for part in parts[1:]:
+        raw = _merge_overlay(raw, yaml.safe_load(part.decode("utf-8")) or {}, "")
     _validate(raw)
-    return Config(raw=raw, config_hash=hashlib.sha256(data).hexdigest())
+    return Config(raw=raw, config_hash=digest.hexdigest())

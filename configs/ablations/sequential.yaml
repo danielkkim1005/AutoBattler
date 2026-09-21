@@ -1,0 +1,4 @@
+# Question: how big is the seat bias of the v0.1 tick rule?
+# Run with --no-swap, then read the "seat 0 share" line.
+combat:
+  resolution: sequential

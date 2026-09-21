@@ -232,7 +232,7 @@ def test_an_unquoted_version_is_rejected(config):
     ("combat", "move_conflict", "coin"),
     ("combat", "target_rule", "furthest"),
     ("damage", "formula", "flat"),
-    ("board", "positioning", False),
+    ("board", "positioning", "sometimes"),
 ])
 def test_unsupported_options_fail_at_load(config, section, key, value):
     raw = copy.deepcopy(dict(config.raw))

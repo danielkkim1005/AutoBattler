@@ -1,0 +1,3 @@
+# Question: how sensitive is the game to income?
+economy:
+  base_income: 7

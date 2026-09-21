@@ -187,6 +187,17 @@ def placements(state: GameState) -> list[int]:
     return result
 
 
+def final_result(state: GameState) -> dict:
+    """The replay's result block. Lists are indexed by seat."""
+    return {
+        "placements": placements(state),
+        "health": [p.health for p in state.players],
+        "level": [p.level for p in state.players],
+        "gold": [p.gold for p in state.players],
+        "rounds_played": state.round,
+    }
+
+
 def play_game(config: Config, seed: int, agents: Sequence[Agent],
               player_names: Sequence[str] | None = None) -> Replay:
     """Play a full game from a seed and return the replay."""
@@ -199,11 +210,7 @@ def play_game(config: Config, seed: int, agents: Sequence[Agent],
     while not game_over(state):
         replay.rounds.append(resolve(state, rng, agents, agent_rng))
 
-    replay.result = {
-        "placements": placements(state),
-        "health": [p.health for p in state.players],
-        "rounds_played": state.round,
-    }
+    replay.result = final_result(state)
     return replay
 
 
@@ -217,11 +224,7 @@ def replay_game(config: Config, replay: Replay) -> Replay:
     for recorded in replay.action_sequence():
         fresh.rounds.append(resolve(state, rng, [], recorded=recorded))
 
-    fresh.result = {
-        "placements": placements(state),
-        "health": [p.health for p in state.players],
-        "rounds_played": state.round,
-    }
+    fresh.result = final_result(state)
     return fresh
 
 

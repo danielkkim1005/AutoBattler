@@ -17,7 +17,12 @@ Two resolution modes, chosen by ``combat.resolution``:
   docs/rl/02-environment-bias.md.
 
 In both modes a unit in range but on cooldown holds its ground rather than
-advancing, which keeps ``range`` meaningful. Trait bonuses are baked into a
+advancing, which keeps ``range`` meaningful.
+
+``board.positioning: false`` (v0.3) turns the fight into a brawl: every unit is
+in range of every enemy, nobody moves, and ``nearest`` targeting collapses to
+the tiebreak. Squares still exist - they just stop mattering - which is what
+makes it a clean control for measuring what positioning is worth. Trait bonuses are baked into a
 fresh ``CombatUnit`` at construction, so ``max_health`` is never written to.
 
 Randomness: only ``simultaneous`` with ``move_conflict: random`` draws from the
@@ -120,14 +125,21 @@ def _living(units: dict[int, CombatUnit], owner: int | None = None) -> list[Comb
 
 def _acquire_target(config: Config, unit: CombatUnit,
                     units: dict[int, CombatUnit]) -> int | None:
-    """Pick a target by target_rule, breaking ties on lowest uid."""
+    """Pick a target by target_rule, breaking ties on lowest uid.
+
+    In a brawl (``board.positioning: false``) there is no distance, so
+    ``nearest`` has nothing to measure and falls through to the tiebreak.
+    """
     rule = config.combat["target_rule"]
     metric = config.combat["move_metric"]
     enemies = [u for u in _living(units) if u.owner != unit.owner]
     if not enemies:
         return None
 
-    if rule == "nearest":
+    if rule == "nearest" and not config.board["positioning"]:
+        def key(enemy: CombatUnit) -> tuple[int, int]:
+            return (0, enemy.uid)
+    elif rule == "nearest":
         def key(enemy: CombatUnit) -> tuple[int, int]:
             return (distance(metric, unit.x, unit.y, enemy.x, enemy.y), enemy.uid)
     else:  # lowest_health; config validation rules out anything else
@@ -146,6 +158,9 @@ def _current_target(config: Config, unit: CombatUnit,
 
 
 def _in_range(config: Config, unit: CombatUnit, target: CombatUnit) -> bool:
+    """Within range on the grid. In a brawl, everyone reaches everyone."""
+    if not config.board["positioning"]:
+        return True
     metric = config.combat["move_metric"]
     return distance(metric, unit.x, unit.y, target.x, target.y) <= unit.range
 

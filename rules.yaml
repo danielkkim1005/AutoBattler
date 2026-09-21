@@ -6,7 +6,7 @@
 
 # Release this ruleset ships with. Quoted on purpose: unquoted, YAML reads
 # 0.10 as the float 0.1. Must match engine/version.py (a test enforces it).
-version: "0.2"
+version: "0.3"
 
 match:
   players: 2
@@ -57,7 +57,9 @@ level:
   buy_cost: {2: 4, 3: 8, 4: 14}
 
 board:
-  positioning: true       # false => no grid; combat is a rules-based brawl
+  # false => a brawl: everyone in range, nobody moves (v0.3). The control
+  # for measuring what positioning is worth; see configs/ablations/brawl.yaml.
+  positioning: true
   width: 5
   height: 3
   # Each player occupies their own half in a mirrored 3x5; on contact the
@@ -73,8 +75,10 @@ combat:
   #                 ablation: it hands a structural edge to one side.
   resolution: simultaneous
   # Two units stepping into the same square in the same tick (simultaneous
-  # only). random: seeded draw from the round's combat stream. lowest_id:
-  # lower unit_id wins, which quietly favours whoever bought first.
+  # only). random: seeded draw from the round's combat stream, fair by
+  # construction. lowest_id: lower unit_id wins. In principle that favours
+  # whoever bought first; measured over 500 greedy mirrors it made no
+  # detectable difference (52.4% vs 52.2% for seat 0).
   move_conflict: random
   target_rule: nearest    # nearest | lowest_health
   target_tiebreak: lowest_id

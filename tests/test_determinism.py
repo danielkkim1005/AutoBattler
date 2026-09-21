@@ -63,9 +63,24 @@ def test_agent_randomness_is_off_the_engine_stream(config):
 
 
 def test_config_hash_matches_the_file(config):
-    expected = hashlib.sha256(DEFAULT_RULES_PATH.read_bytes()).hexdigest()
+    content = DEFAULT_RULES_PATH.read_bytes().replace(b"\r\n", b"\n")
+    expected = hashlib.sha256(content).hexdigest()
     assert config.config_hash == expected
     assert load_config().config_hash == expected
+
+
+def test_config_hash_ignores_line_endings(config, tmp_path):
+    """A CRLF checkout of the same rules must not orphan existing replays."""
+    lf = DEFAULT_RULES_PATH.read_bytes().replace(b"\r\n", b"\n")
+    crlf = tmp_path / "rules_crlf.yaml"
+    crlf.write_bytes(lf.replace(b"\n", b"\r\n"))
+    assert load_config(crlf).config_hash == config.config_hash
+
+
+def test_config_hash_still_sees_real_edits(config, tmp_path):
+    edited = tmp_path / "rules_edited.yaml"
+    edited.write_bytes(DEFAULT_RULES_PATH.read_bytes() + b"# a comment\n")
+    assert load_config(edited).config_hash != config.config_hash
 
 
 def test_replay_header_carries_seed_and_hash(config):

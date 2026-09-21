@@ -1,0 +1,3 @@
+# Question: does settling contested squares by unit id bring the bias back?
+combat:
+  move_conflict: lowest_id

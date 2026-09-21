@@ -1,0 +1,4 @@
+# Line endings are part of the replay contract. config_hash is a hash of
+# rules.yaml, so a checkout that rewrites LF as CRLF would silently change it
+# and orphan every replay recorded before. Keep text files LF everywhere.
+* text=auto eol=lf

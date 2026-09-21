@@ -11,6 +11,9 @@ no rendering. `resolve()` takes state and a seeded RNG and returns state.
 
 All randomness flows through a single `random.Random` instance passed in
 explicitly. No module-level `random`, no unseeded calls, anywhere in `engine/`.
+*(v0.2)* That master stream gives up exactly one draw per round, from which the
+round derives its own shop stream and combat stream. Agents draw from a
+separate stream of their own, so a recorded action list replays exactly.
 
 All iteration over units is by sorted `unit_id`. Never iterate a `set`, and
 never depend on `dict` insertion order for anything that affects outcomes.
@@ -44,13 +47,28 @@ unit it cannot appear in a shop at all. Selling returns the copy to the pool.
 Boards are merged into a single field, player 0 on the left half, player 1
 mirrored on the right.
 
-Per tick, for each living unit sorted by id: if its current target is dead or
-unset, acquire a new one by `target_rule` with `target_tiebreak`. If the target
-is within `range`, and `ticks_until_attack` has reached zero, deal
-`attack_damage` and reset the cooldown. Otherwise step `move_per_tick` toward
-the target along the axis that most reduces `move_metric` distance, preferring
-the x-axis on ties, and skipping the move if the destination is occupied.
+*(Changed in v0.2 — see docs/rl/02-environment-bias.md.)* Each tick resolves
+simultaneously, in three phases:
+
+1. **Decide.** For each living unit sorted by id, against the field as it stood
+   at the start of the tick: if its current target is dead or unset, acquire a
+   new one by `target_rule` with `target_tiebreak`. If the target is within
+   `range` and `ticks_until_attack` is zero, it will attack. If the target is
+   within `range` but the unit is on cooldown, it holds position. Otherwise it
+   wants to step `move_per_tick` toward the target along the axis that most
+   reduces `move_metric` distance, preferring the x-axis on ties, provided that
+   square was empty at the start of the tick.
+2. **Strike.** Every decided attack deals `attack_damage` and resets the
+   attacker's cooldown — including attacks from units that die this tick.
+   Deaths are settled only once all damage is in.
+3. **Move.** Surviving units take their step. Two units claiming one square are
+   settled by `move_conflict`.
+
 Decrement cooldowns at the end of the tick.
+
+The v0.1 rule — each unit acting in id order on a field already changed by
+lower ids — survives as `resolution: sequential`, an ablation only. It hands
+one side a structural edge.
 
 Combat ends when one side has no living units, or at `tick_cap`, in which case
 `timeout_result` decides.
@@ -58,7 +76,9 @@ Combat ends when one side has no living units, or at `tick_cap`, in which case
 ## Event log
 
 Every mutation appends a record: `{tick, type, actor, target, value}` where
-`type` is one of `attack`, `death`, `move`, `trait_applied`, `combat_end`.
+`type` is one of `spawn`, `attack`, `death`, `move`, `trait_applied`,
+`combat_end`. *(v0.2)* `spawn` records each unit's template, starting square,
+and final stats at tick 0; without it the log could not be rendered.
 This is the only output the renderer consumes and the primary artifact for
 debugging both the engine and agent behaviour.
 
@@ -66,7 +86,7 @@ debugging both the engine and agent behaviour.
 
 ```json
 {
-  "version": "0.1.0",
+  "version": "0.2",
   "config_hash": "<sha256 of rules.yaml>",
   "seed": 42,
   "players": ["agent:ppo-1200", "human:daniel"],

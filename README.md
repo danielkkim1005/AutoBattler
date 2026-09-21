@@ -1,19 +1,32 @@
-# Autobattler — v0
+# Autobattler
 
-A headless, deterministic autobattler engine. `rules.yaml` holds every number,
-[`SPEC.md`](SPEC.md) holds the semantics, and `engine/` implements them without
-printing, sleeping, or rendering anything.
+A headless, deterministic autobattler engine, built as an environment for
+reinforcement learning. `rules.yaml` holds every number, [`SPEC.md`](SPEC.md)
+holds the semantics, and `engine/` implements them without printing, sleeping,
+or rendering anything.
+
+**Current release: v0.2 — Fair fights.** See [CHANGELOG.md](CHANGELOG.md).
 
 ```bash
 python -m pytest tests/ -q
 python run_game.py --seed 42 --verify
-python run_game.py --agents greedy random --games 100 --summary
+python run_game.py --agents greedy greedy --games 200 --summary
 ```
+
+## Documentation
+
+| Read this | For |
+| --- | --- |
+| [CHANGELOG.md](CHANGELOG.md) | What changed in each release, and why it matters for RL. |
+| [docs/rl/](docs/rl/README.md) | RL notes: lessons from this codebase, in reading order. |
+| [docs/VERSIONING.md](docs/VERSIONING.md) | The `MAJOR.MINOR` scheme and the release checklist. |
+| [SPEC.md](SPEC.md) | Game semantics. Changed sections are marked with their version. |
 
 ## Layout
 
 | Path | What lives there |
 | --- | --- |
+| `engine/version.py` | The release version. Stamped into every replay. |
 | `engine/config.py` | Loads, validates, and hashes `rules.yaml`. The only door to the file. |
 | `engine/state.py` | `GameState`, `PlayerState`, board ownership. |
 | `engine/actions.py` | Planning actions: legality, enumeration, application. |
@@ -21,104 +34,86 @@ python run_game.py --agents greedy random --games 100 --summary
 | `engine/pool.py` | The shared pool. Buying takes a copy, selling returns it. |
 | `engine/economy.py` | Income, interest, streaks, refunds. |
 | `engine/traits.py` | Breakpoints and the bonuses they unlock. |
-| `engine/combat.py` | Board merge, tick loop, targeting, movement. |
-| `engine/game.py` | The round loop, damage, placements, full games. |
+| `engine/combat.py` | Board merge, simultaneous tick resolution, targeting, movement. |
+| `engine/game.py` | The round loop, per-round random streams, damage, placements. |
 | `engine/replay.py` | The replay record and its deterministic serialisation. |
 | `agents/` | `RandomAgent` (the floor) and `GreedyAgent` (a non-degenerate opponent). |
 | `run_game.py` | CLI harness. All printing lives here. |
 
 ## Determinism
 
-`tests/test_determinism.py` asserts the property the spec demands: identical
-seed + `config_hash` + action sequence produces a byte-identical replay. It
-checks three ways — the same seed twice, a recorded action list replayed
-through `replay_game`, and a static AST scan proving nothing under `engine/`
-calls the process-wide `random`.
+Identical seed + `config_hash` + action sequence produces a byte-identical
+replay. That is asserted three ways in `tests/test_determinism.py`.
 
-Making that true required **splitting the RNG into two streams**. The engine
-stream (`random.Random(seed)`) rolls shops. The agent stream
-(`random.Random(seed ^ 0x5EED)`) is what agents deliberate with. If agents drew
-from the engine stream, replaying a recorded action list — where the agents are
-gone and draw nothing — would leave the engine's generator in a different place
-and desync every later shop roll. The spec says a replay is reproducible from
-seed + hash + *actions*, which only holds if agent deliberation is off the
-engine's stream.
+Randomness is split into streams so that nothing drifts: agents deliberate on
+their own stream, and each round derives a private shop stream and combat
+stream from one draw of the master stream. Why each split exists, and what
+breaks without it, is in [docs/rl/01-determinism.md](docs/rl/01-determinism.md).
 
-## Changes made to `rules.yaml`
+## Changes made to the provided `rules.yaml`
 
-**One bug fix.** Line 83 read `skirmisher:{breakpoint: 2, ...}`. YAML requires a
-space after the key, so the file did not parse at all. Now `skirmisher: {...}`.
+- **v0.1 fixed** `skirmisher:{...}`, which had no space after the key and made
+  the file invalid YAML.
+- **v0.1 added** `economy.cost_by_tier` (there was no unit price) and
+  `planning.max_actions_per_round` (a rail against agents that never end their
+  turn).
+- **v0.2 added** `combat.resolution` and `combat.move_conflict`, and quoted
+  `version`, which must now match `engine/version.py`.
 
-**Two additions,** because the engine needed values the file did not carry and
-the spec forbids hardcoding them in Python:
-
-- `economy.cost_by_tier: {1: 1, 2: 2, 3: 3}` — there was no unit purchase price
-  anywhere. Cost equals tier, which is the genre default; `sell_refund: full`
-  refunds exactly this.
-- `planning.max_actions_per_round: 200` — a safety rail so an agent that never
-  returns `end_turn` is cut off instead of looping forever.
-
-Both are guesses at your intent. Change the numbers freely; nothing reads them
-except through `Config`.
+All of these are guesses at your intent. Change the numbers freely; nothing
+reads them except through `Config`, which rejects unsupported options at load.
 
 ## Judgment calls the spec left open
 
 Each of these changes outcomes, so they are listed rather than buried.
 
-**A unit in range but on cooldown holds its ground.** The spec says a unit
-attacks if in range and off cooldown, "otherwise" it steps toward its target.
-Read literally, a ranged unit would keep walking while its cooldown ticks and
-end up in melee, which makes `range` meaningless. Implemented as: in range means
-stay put, whether or not the attack is ready.
+**Ticks resolve simultaneously** (v0.2). Every unit decides from the same
+snapshot, then all attacks land, then survivors move. The spec's original
+unit-by-unit rule gave player 0 a measurable disadvantage; the full story is in
+[docs/rl/02-environment-bias.md](docs/rl/02-environment-bias.md).
+
+**A unit in range but on cooldown holds its ground.** Read literally, the spec
+has it step toward its target while waiting, which walks ranged units into
+melee and makes `range` meaningless.
 
 **Traits count copies, not distinct units.** Two footmen activate vanguard.
-Counting unique unit ids instead (the TFT convention) would make breakpoint 2
-very hard to reach on a 2-to-5 unit board.
+Counting unique unit ids (the TFT convention) would make breakpoint 2 very hard
+to reach on a 2-to-5 unit board.
 
-**Trait bonuses are baked in at construction.** `CombatUnit`s are built fresh at
-the start of each combat with bonuses already folded into their stat fields, so
-`max_health` is written once and never again — the spec's invariant holds
-literally. A cooldown bonus is floored at 1 tick so a future buff cannot produce
-free attacks.
+**Trait bonuses are baked in at construction.** Combat units are built fresh
+each fight with bonuses folded into their stats, so `max_health` is written once
+and never again. A cooldown bonus is floored at 1 tick.
 
 **Shop units are weighted by copies remaining.** A contested unit gets rarer as
-opponents buy it. A tier with nothing left yields an empty slot, and the tier
-draw is still consumed so the RNG stream stays aligned.
+opponents buy it. A tier with nothing left yields an empty slot.
 
 **Draws damage nobody and break both streaks.** The spec only defines damage to
 a losing player.
 
-**New units are placed on the first free square** in `(x, y)` order, and
-`placements` uses 0 for first place, with ties sharing a placement.
+**New units go on the first free square** in `(x, y)` order. `placements` uses
+0 for first place, and ties share a placement.
 
 ## Event log conventions
 
-The record is fixed at `{tick, type, actor, target, value}`, which forces two
-overloads:
+The record is fixed at `{tick, type, actor, target, value}`, which forces some
+overloading:
 
-- `trait_applied` — `actor` is the unit uid, `target` is the trait name,
-  `value` is the stat delta. One event per unit per stat, all at tick 0.
-- `combat_end` — `actor` is the winning player index (`null` on a draw),
-  `value` is the ending tick.
-- `move` — `value` is the destination `[x, y]`; `target` is who it is chasing.
+| type | actor | target | value |
+| --- | --- | --- | --- |
+| `spawn` | unit uid | owner's player index | `{unit, x, y, max_health, attack_damage, attack_cooldown, range}` — field square, post-trait stats |
+| `trait_applied` | unit uid | trait name | stat delta |
+| `attack` | attacker uid | target uid | damage |
+| `death` | dead uid | lowest uid that hit it this tick | final health (≤ 0) |
+| `move` | unit uid | uid it is chasing | destination `[x, y]` |
+| `combat_end` | winning player index, or `null` on a draw | — | final tick |
 
-## Open questions, unchanged
+## Open questions
 
-The spec's three ablations are all reachable by editing `rules.yaml` alone:
-`purchase_when_board_full`, the `damage.formula`, and `board.positioning`.
-
-Two observations from the seed sweeps, neither investigated:
-
-- `GreedyAgent` beats `RandomAgent` in 50/50 games at an average of 5.4 rounds.
-  Games are short — `flat_plus_survivors` plus a 20-health pool ends things
-  fast, which is worth a look before reading anything into agent strength.
-- Random-vs-random over 50 seeds went 20/30 to player 1. Within noise at that
-  sample size, but player 0 plans first and takes pool priority, and lower uids
-  act first within a tick, so a real side bias is plausible. Worth a larger
-  sweep before tuning anything.
-
-`board.positioning: false` is accepted by the config but not yet branched on;
-combat always uses the grid.
+The spec's three ablations: whether a bench is needed
+(`purchase_when_board_full`), whether `flat_plus_survivors` makes going wide
+dominant (`damage.formula`), and whether positioning contributes anything
+(`board.positioning`). Only the damage formula can be flipped today; `bench`
+and `positioning: false` are rejected at load until they are implemented.
 
 ## Attribution
 

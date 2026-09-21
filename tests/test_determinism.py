@@ -49,10 +49,10 @@ def test_agent_randomness_is_off_the_engine_stream(config):
     """
 
     class Chatty(RandomAgent):
-        def choose(self, state, player, rng):
+        def choose(self, observation, rng):
             for _ in range(7):
                 rng.random()
-            return super().choose(state, player, rng)
+            return super().choose(observation, rng)
 
     quiet = play_game(config, 42, [RandomAgent("a"), RandomAgent("b")])
     noisy = play_game(config, 42, [Chatty("a"), Chatty("b")])

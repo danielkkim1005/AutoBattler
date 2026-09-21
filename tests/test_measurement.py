@@ -10,7 +10,7 @@ import pytest
 from conftest import place, tweak
 
 from agents import GreedyAgent, PositionalAgent, RandomAgent
-from agents.positional import formation
+from agents.positional import formation, next_formation_step
 from analysis.evaluate import compare_rulesets, run_matchup
 from analysis.stats import games_for_margin, mean_interval, wilson_interval
 from analysis.telemetry import game_stats
@@ -19,6 +19,7 @@ from engine.actions import MOVE, SWAP, apply_action
 from engine.combat import resolve_combat
 from engine.config import DEFAULT_RULES_PATH, ConfigError, load_config
 from engine.game import play_game
+from engine.observation import observe, snapshot_public
 from engine.state import new_game
 
 ABLATIONS_DIR = Path(__file__).resolve().parent.parent / "configs" / "ablations"
@@ -102,10 +103,17 @@ def test_compare_rulesets_pairs_by_seed(config):
 
 # -- PositionalAgent ---------------------------------------------------------
 
+def own_view(state, seat=0):
+    """An observation outside a real round: freeze a snapshot, then look."""
+    snapshot_public(state)
+    return observe(state, seat)
+
+
 def test_formation_puts_melee_in_front_and_ranged_behind(state, config):
     melee = place(state, 0, "warden", 0, 0)
     ranged = place(state, 0, "archmage", 4, 1)
-    plan = formation(config, state.templates, state.players[0].units())
+    view = own_view(state)
+    plan = formation(view["board_shape"], view["self"]["board"])
     width = config.board["width"]
     assert plan[melee][0] == width - 1, "melee faces the enemy"
     assert plan[ranged][0] == 0, "ranged holds the back line"
@@ -120,12 +128,13 @@ def test_formation_converges_in_one_step_per_unit(state, config):
         place(state, 0, template, x, y)
     player = state.players[0]
     steps = 0
-    while (step := PositionalAgent._next_formation_step(state, player)) is not None:
+    while (step := next_formation_step(own_view(state))) is not None:
         assert step["type"] in (MOVE, SWAP)
         apply_action(state, player, step, rng)
         steps += 1
         assert steps <= len(layout)
-    plan = formation(config, state.templates, player.units())
+    view = own_view(state)
+    plan = formation(view["board_shape"], view["self"]["board"])
     assert all(player.board[uid].pos() == sq for uid, sq in plan.items())
 
 

@@ -1,16 +1,16 @@
 """A greedy baseline: level when it can, buy the best unit it can afford.
 
-Deliberately simple and fully deterministic given the state - it draws nothing
-from the rng. It exists to give the engine a non-degenerate opponent and to
-make economy tuning visible, not to play well.
+Deliberately simple and fully deterministic given its observation - it draws
+nothing from the rng. It exists to give the engine a non-degenerate opponent
+and a fixed ruler to measure other agents against, not to play well.
 """
 
 from __future__ import annotations
 
 import random
+from typing import Any
 
-from engine.actions import BUY, BUY_LEVEL, END_TURN, is_legal
-from engine.state import GameState, PlayerState
+from engine.actions import BUY, BUY_LEVEL, END_TURN
 
 
 class GreedyAgent:
@@ -18,25 +18,23 @@ class GreedyAgent:
         self.name = name
         self.level_first = level_first
 
-    def choose(self, state: GameState, player: PlayerState,
-               rng: random.Random) -> dict:
+    def choose(self, observation: dict[str, Any], rng: random.Random) -> dict:
+        me = observation["self"]
+        legal = observation["legal_actions"]
+
         if self.level_first:
             level_up = {"type": BUY_LEVEL}
-            if player.board_full(state.config) and is_legal(state, player, level_up):
+            if len(me["board"]) >= me["board_size"] and level_up in legal:
                 return level_up
 
         best_slot = None
         best_tier = 0
-        for slot, template_id in enumerate(player.shop):
-            if template_id is None:
+        for slot, item in enumerate(me["shop"]):
+            if item is None or {"type": BUY, "slot": slot} not in legal:
                 continue
-            if not is_legal(state, player, {"type": BUY, "slot": slot}):
-                continue
-            tier = state.templates[template_id].tier
-            if tier > best_tier:
-                best_tier, best_slot = tier, slot
+            if item["tier"] > best_tier:
+                best_tier, best_slot = item["tier"], slot
 
         if best_slot is not None:
             return {"type": BUY, "slot": best_slot}
-
         return {"type": END_TURN}

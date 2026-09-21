@@ -6,39 +6,62 @@ boards fight, damage is applied, dead players are removed.
 Both players plan against the same round state. Ordering between them does not
 matter because planning actions never touch shared state except the pool, which
 is resolved on purchase in player-index order.
+
+Since v0.4 a round is three explicit phases, so that something outside the
+engine - an RL environment waiting on a learner's next action - can drive it
+one action at a time:
+
+    ctx = begin_round(state, rng)        # income, shops, public snapshot
+    act(state, ctx, seat, action)        # any number of times, any seat
+    finish_round(state, ctx)             # combat, damage, eliminations
+
+``resolve`` composes the three for the common case where agents are called
+directly. Agents receive an observation (engine/observation.py), never the
+state itself.
 """
 
 from __future__ import annotations
 
 import random
-from typing import Protocol, Sequence
+from dataclasses import dataclass
+from typing import Any, Protocol, Sequence
 
 from engine import events
 from engine.actions import END_TURN, apply_action
 from engine.combat import CombatResult, resolve_combat
 from engine.config import Config
 from engine.economy import round_income
+from engine.observation import observe, snapshot_public
 from engine.replay import Replay, RoundRecord
 from engine.shop import roll_shop
 from engine.state import GameState, PlayerState, new_game
 
 # Agents decide on their own random stream, derived from the same seed but
-# never interleaved with the engine's. See run_planning.
+# never interleaved with the engine's. See docs/rl/01-determinism.md.
 AGENT_STREAM_SALT = 0x5EED
 
 
 class Agent(Protocol):
-    """A decision maker for one player.
+    """A decision maker for one seat.
 
     Called repeatedly during the planning phase until it returns ``end_turn``
-    or the configured action cap is hit.
+    or the configured action cap is hit. It sees only an observation: its own
+    live state, and everyone else as they stood when planning began.
     """
 
     name: str
 
-    def choose(self, state: GameState, player: PlayerState,
-               rng: random.Random) -> dict:
+    def choose(self, observation: dict[str, Any], rng: random.Random) -> dict:
         ...
+
+
+@dataclass
+class RoundContext:
+    """One round in progress: its record so far and its private streams."""
+
+    record: RoundRecord
+    shop_rng: random.Random
+    combat_rng: random.Random
 
 
 def round_streams(rng: random.Random) -> tuple[random.Random, random.Random]:
@@ -65,40 +88,44 @@ def roll_shops(state: GameState, rng: random.Random) -> None:
         player.shop = roll_shop(state.config, state.pool, player.level, rng)
 
 
-def run_planning(state: GameState, agents: Sequence[Agent],
-                 rng: random.Random, agent_rng: random.Random) -> list[tuple[int, dict]]:
-    """Let each living player act until it ends its turn. Returns the actions.
+def planning_order(state: GameState) -> list[int]:
+    """Seats that plan this round, in the order their purchases resolve."""
+    return [p.index for p in state.living_players()]
 
-    Agents draw from ``agent_rng``, never from the engine's ``rng``. Keeping the
-    streams apart is what makes a recorded action list replayable: on replay the
-    agents are gone, but the engine's stream must land in exactly the same place.
+
+def begin_round(state: GameState, rng: random.Random) -> RoundContext:
+    """Open a round: advance the counter, pay income, roll shops, and freeze
+    the public snapshot that observations are built from."""
+    state.round += 1
+    shop_rng, combat_rng = round_streams(rng)
+    ctx = RoundContext(RoundRecord(round=state.round), shop_rng, combat_rng)
+    pay_income(state)
+    roll_shops(state, shop_rng)
+    snapshot_public(state)
+    return ctx
+
+
+def act(state: GameState, ctx: RoundContext, seat: int, action: dict) -> None:
+    """Apply one planning action for one seat and record it."""
+    apply_action(state, state.players[seat], action, ctx.shop_rng)
+    ctx.record.actions.append((seat, action))
+
+
+def plan_turn(state: GameState, ctx: RoundContext, seat: int, agent: Agent,
+              agent_rng: random.Random) -> None:
+    """Ask one agent for actions until it ends its turn or hits the cap.
+
+    Agents draw from ``agent_rng``, never from the round's streams. Keeping
+    them apart is what makes a recorded action list replayable: on replay the
+    agents are gone, but the engine's streams must land in the same place.
     """
-    cap = state.config.planning["max_actions_per_round"]
-    taken: list[tuple[int, dict]] = []
-
-    for player in state.living_players():
-        agent = agents[player.index]
-        for _ in range(cap):
-            action = agent.choose(state, player, agent_rng)
-            apply_action(state, player, action, rng)
-            taken.append((player.index, action))
-            if action["type"] == END_TURN:
-                break
-        else:
-            # Agent never ended its turn; the cap stands in for one.
-            forced = {"type": END_TURN}
-            apply_action(state, player, forced, rng)
-            taken.append((player.index, forced))
-
-    return taken
-
-
-def replay_planning(state: GameState, actions: Sequence[tuple[int, dict]],
-                    rng: random.Random) -> list[tuple[int, dict]]:
-    """Apply a recorded action list instead of asking agents."""
-    for player_index, action in actions:
-        apply_action(state, state.players[player_index], action, rng)
-    return list(actions)
+    for _ in range(state.config.planning["max_actions_per_round"]):
+        action = agent.choose(observe(state, seat), agent_rng)
+        act(state, ctx, seat, action)
+        if action["type"] == END_TURN:
+            return
+    # The agent never ended its turn; the cap stands in for it.
+    act(state, ctx, seat, {"type": END_TURN})
 
 
 def combat_damage(config: Config, survivors: Sequence,
@@ -108,9 +135,7 @@ def combat_damage(config: Config, survivors: Sequence,
     base = config.damage["base"]
     if formula == "flat_plus_survivors":
         return base + len(survivors)
-    if formula == "flat_plus_tiers":
-        return base + sum(tier_of[u.template_id] for u in survivors)
-    raise ValueError("unknown damage formula: " + str(formula))
+    return base + sum(tier_of[u.template_id] for u in survivors)  # flat_plus_tiers
 
 
 def apply_combat_result(state: GameState, result: CombatResult,
@@ -135,6 +160,17 @@ def remove_dead_players(state: GameState) -> None:
             player.alive = False
 
 
+def finish_round(state: GameState, ctx: RoundContext) -> CombatResult:
+    """Close a round: fight, apply damage, remove the dead."""
+    result = resolve_combat(state, ctx.combat_rng)
+    ctx.record.events = result.log.records()
+    tier_of = {tid: state.templates[tid].tier for tid in sorted(state.templates)}
+    apply_combat_result(state, result, tier_of)
+    remove_dead_players(state)
+    state.public = {}  # observations are only valid during planning
+    return result
+
+
 def resolve(state: GameState, rng: random.Random, agents: Sequence[Agent],
             agent_rng: random.Random | None = None,
             recorded: Sequence[tuple[int, dict]] | None = None) -> RoundRecord:
@@ -145,27 +181,17 @@ def resolve(state: GameState, rng: random.Random, agents: Sequence[Agent],
     own shop and combat streams. ``agent_rng`` is the agents' and is unused
     when replaying a recorded action list.
     """
-    state.round += 1
-    record = RoundRecord(round=state.round)
-    shop_rng, combat_rng = round_streams(rng)
-
-    pay_income(state)
-    roll_shops(state, shop_rng)
-
+    ctx = begin_round(state, rng)
     if recorded is None:
         if agent_rng is None:
             raise ValueError("agent_rng is required when agents are deciding")
-        record.actions = run_planning(state, agents, shop_rng, agent_rng)
+        for seat in planning_order(state):
+            plan_turn(state, ctx, seat, agents[seat], agent_rng)
     else:
-        record.actions = replay_planning(state, recorded, shop_rng)
-
-    result = resolve_combat(state, combat_rng)
-    record.events = result.log.records()
-
-    tier_of = {tid: state.templates[tid].tier for tid in sorted(state.templates)}
-    apply_combat_result(state, result, tier_of)
-    remove_dead_players(state)
-    return record
+        for seat, action in recorded:
+            act(state, ctx, seat, action)
+    finish_round(state, ctx)
+    return ctx.record
 
 
 def game_over(state: GameState) -> bool:
@@ -230,6 +256,11 @@ def replay_game(config: Config, replay: Replay) -> Replay:
 
 __all__ = [
     "Agent",
+    "RoundContext",
+    "begin_round",
+    "act",
+    "plan_turn",
+    "finish_round",
     "resolve",
     "play_game",
     "replay_game",

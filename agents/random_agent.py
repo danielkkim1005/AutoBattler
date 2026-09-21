@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import random
-
-from engine.actions import legal_actions
-from engine.state import GameState, PlayerState
+from typing import Any
 
 
 class RandomAgent:
     def __init__(self, name: str = "agent:random") -> None:
         self.name = name
 
-    def choose(self, state: GameState, player: PlayerState,
-               rng: random.Random) -> dict:
-        options = legal_actions(state, player)
+    def choose(self, observation: dict[str, Any], rng: random.Random) -> dict:
+        options = observation["legal_actions"]
         return options[rng.randrange(len(options))]

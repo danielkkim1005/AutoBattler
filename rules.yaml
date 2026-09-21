@@ -6,7 +6,7 @@
 
 # Release this ruleset ships with. Quoted on purpose: unquoted, YAML reads
 # 0.10 as the float 0.1. Must match engine/version.py (a test enforces it).
-version: "0.3"
+version: "0.4"
 
 match:
   players: 2

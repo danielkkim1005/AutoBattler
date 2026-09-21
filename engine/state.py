@@ -58,6 +58,9 @@ class GameState:
     players: list[PlayerState]
     round: int = 0
     next_uid: int = 0
+    # What every player may know about every other player this round, frozen
+    # at the start of planning (v0.4). See engine/observation.py.
+    public: dict = field(default_factory=dict)
 
     def new_uid(self) -> int:
         uid = self.next_uid
